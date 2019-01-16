@@ -151,7 +151,7 @@ def merge_rows(matrix, graph, strategy,alpha,beta,threshold):
         set_max = candidate
         matrix = merge_set_of_clone(matrix,set_max,alpha,beta)
         d_row = create_dict_prob_row(matrix,alpha,beta)
-        G = create_graph(len(matrix),d_row,threshold)"
+        G = create_graph(len(matrix),d_row,threshold)
         matrix = merge_rows(matrix, G, strategy, alpha, beta, threshold)
         return matrix            
     else:
