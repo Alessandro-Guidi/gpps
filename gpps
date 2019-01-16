@@ -13,6 +13,7 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt 
 from operator import itemgetter
+from networkx.algorithms import approximation
 #user-created libraries
 sys.path.append(os.path.abspath(os.getcwd() + '/utils'))
 from matrix_utils import *
@@ -21,33 +22,56 @@ from outputs import *
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!COSE DA FARE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #TROVARE/PROVARE AD UTILIZZARE LE PERCENTUALI LOGARITMICHE
-#PROBLEMA QUANDO CANCELLO TROPPE ROW/COL E MI RITROVO DELLE NUOVE ROW/COL CHE SODDISFANO NUOVAMENTE I CRITERI
-#UTILIZZARE STESSO APPROCCIO CON LE MUTAZIONI
-#TROVARE UNA LIBRERIA SU NETWORKX PER IL MERGE DEI NODI
+#ripetere le stesse operazioni per le colonne
+#creare dei casi di test e provarli
 
-#devo risolvere il problema che mi da' quando lancio il file 2.txt
 
 
 #create graph for rows and return it
-def create_graph(nrow,d,p):
+def create_graph(n_nodes,dictionary,threshold):
     G = nx.Graph()
-    G.add_nodes_from(range(nrow))
+    G.add_nodes_from(range(n_nodes))
     #'''
     'control view'
-    plt.subplot(221)
+    plt.subplot(121)
     nx.draw(G, with_labels=True, font_weight='bold')
     #'''
-    [G.add_edge(key[0],key[1], weight = value) for key, value in d.iteritems() if value>p]
+    [G.add_edge(key[0],key[1], weight = value) for key, value in dictionary.iteritems() if value>threshold]
     #'''
-    plt.subplot(222)
+    plt.subplot(122)
     nx.draw(G, with_labels=True, font_weight='bold')
     plt.show()
     #'''
     return G
 
 
+#I use the dict, pair clones(them index)and similar probability.
+#make tuple
+def create_dict_prob_row(matrix,alpha,beta): 
+    tup_row = namedtuple('Tup',['index','percent'])
+    pair_percent =[]
+    for index1 in range(len(matrix)-1):
+        for index2 in range(index1+1,len(matrix)):
+            prob = prob_merging(matrix[index1],matrix[index2],alpha,beta)
+            pair_percent.append(tup_row((index1,index2),prob))
+    d_row = dict(pair_percent)
+    return d_row
+
+
+#I use the dict, pair mutations(them index)and similar probability.
+#make tuple
+def create_dict_prob_col(matrix,alpha,beta):
+    tup_col = namedtuple('Tup',['index','percent'])
+    pair_probability = []
+    for index1 in range(len(matrix[0])-1):
+        for index2 in range(index1+1,len(matrix[0])):
+            prob = prob_merging(matrix[:,index1],matrix[:,index2],alpha,beta)
+            pair_probability.append(tup_col((index1,index2),prob))
+    d_col = dict(pair_probability)
+    return d_col
+
 #for every pair rows returns likelihood probability
-def prob_mergin(row1, row2, alpha, beta):
+def prob_merging(row1, row2, alpha, beta):
     prob = 1
     lenght = len(row1)
     for i in range(lenght):
@@ -60,118 +84,144 @@ def prob_mergin(row1, row2, alpha, beta):
             prob = prob * ((1-beta)*alpha + (1-alpha)*beta)
     return prob
 
-#function support to merge_rows !!!the miss_value are changed!!!
-def merge_cycle_clone(matrix,cycle):
-    print "cycle for row:",cycle 
-    clones = matrix[np.array(cycle)]
+#function support to merge_rows
+def merge_set_of_clone(matrix,subgraph,alpha,beta):
+    print "sto per fare il controllo,per le cellule"
+    if type(subgraph) is not(set):
+        nodes = list(subgraph.nodes)
+        print "non e' un set,e' un grafo,per le cellule"
+    else:
+        nodes = list(subgraph)
+        print "e' un set,per le cellule"
+    clones = matrix[np.array(nodes)]
+    print clones
     new_clone = []
     for i in range(len(clones[0])):
         col = collections.Counter(clones[:,i])
-        if col[0] >= col[1]:
-            new_clone = np.append(new_clone, 0)
-        else:
+        prob_all_one = alpha**col[0]*(1-beta)**col[1]
+        prob_all_zero = beta**col[1]*(1-alpha)**col[0]
+        if prob_all_one >= prob_all_zero:
             new_clone = np.append(new_clone, 1)
-    for index in cycle:
-        matrix[index] = new_clone
+        else:
+            new_clone = np.append(new_clone, 0)
+    set_nodes = set(nodes)
+    print "set_nodes",set_nodes
+    set_clones = set(range(len(matrix)))
+    print "set_clones",set_clones
+    new_index = list(set_clones-set_nodes)
+    print "new_index",new_index
+    matrix = matrix[new_index]
+    matrix = np.vstack((matrix,new_clone))
     print "new clone:",new_clone
     print "matrix now",matrix     
     return matrix  
 
-##function support to merge_rows, it search the max edge with clone !!!the miss_value are changed!!! 
-def find_max_edge(graph,matrix,index):
-    edge_max_similar = sorted(G.edges(index,data=True),key= lambda x: x[2]['weight'],reverse=True)[0]    
-    matrix[index] = matrix[edge_max_similar[1]]
-    return matrix
+
+#take result to find_all_candidates_to_merge_cc and for each connected component calculate the weight and return the maximum
+def find_single_set_to_merge(candidates):
+    max_weight = None
+    max_SB = None
+    for subgraph in candidates:
+        #plt.subplot(111)
+        #nx.draw(subgraph, with_labels = True, font_weight = 'bold')
+        #plt.show()
+        weight = 0
+        for n, nbrs in subgraph.adj.items():
+            for nbr, eattr in nbrs.items():
+                weight = weight+eattr['weight']
+        if weight/2 > max_weight:
+            max_weight = weight/2
+            max_SB = subgraph
+    return max_SB
+
+
+#function that support merge_rows, give a graph and return a potenzial set to merge. Strategy more conservative
+def find_all_candidates_to_merge_cl(graph):
+    candidate = approximation.clique.max_clique(graph)
+    return candidate    
+#function that support merge_rows,give a graph and return a potenzial set to merge. Strategy more aggressive
+def find_all_candidates_to_merge_cc(graph):
+    candidates =  nx.algorithms.components.connected_component_subgraphs(graph)
+    return candidates
     
 #merge rows with higher likelihood value, behind merge the cicle, after merge the single edge, if there are
-def merge_rows(matrix, graph):
-    check = np.zeros((1,len(list(G.node))))
-    cycles = sorted(map(sorted,nx.cycle_basis(G)))
-    if len(cycles) != 0:
-        edge_max_value = sorted(G.edges(data=True),key= lambda x: x[2]['weight']<1,reverse=True)[0]
-        c = max([l for l in cycles if edge_max_value[1] in l and edge_max_value[0] in l],key=len)
-        cycle = cycles.pop(cycles.index(sorted(list(c))))
-        for j in cycle:
-            check[0][j] = 1
-        matrix = merge_cycle_clone(matrix, cycle)
-        for i in range(len(cycles)):
-            indexes = []
-            for index in cycles[i]:
-                if check[0][index] == 0:
-                    indexes.append(index)
-                    check[0][index] == 1
-            if len(indexes) == 1:
-                matrix = find_max_edge(graph,matrix,indexes[0])
-            else:
-                matrix = merge_cycle_clone(matrix, indexes)   
-    edges_isolated = [list(c) for c in sorted(nx.connected_components(G), key=len, reverse=True) if len(c)==2]
-    if len(edges_isolated) != 0:
-        for edge in edges_isolated:
-            if check[0][edge[0]] == 1:
-                matrix = find_max_edge(graph,matrix,edge[1]) 
-            elif check[0][edge[1]] == 1:
-                matrix = find_max_edge(graph,matrix,edge[0]) 
-            else:
-                matrix = merge_cycle_clone(matrix,edge)
-    return matrix
-
-#for every pair cols(mutations) returns likelihood probability
-def prob_merging_mutations(col1,col2,alpha,beta):
-	lenght = len(col1)
-	prob = 1
-	for i in range(1,lenght):
-		if col1[i] == col2[i]:
-			if col1[i] == 1:
-				prob = prob * ((1-alpha)**2+alpha**2)
-			elif col1[i] == 0:
-				prob = prob * ((1-beta)**2+beta**2)
-		elif (col1[i]!=2) and (col2[i]!=2):
-			prob = prob * ((1-alpha)*beta + (1-beta)*alpha)
-	return prob
-
+def merge_rows(matrix, graph, strategy,alpha,beta,threshold):
+    candidates = []
+    print "SONO DENTRO MERGE_ROWS"
+    if strategy == 'clique':
+        candidate = find_all_candidates_to_merge_cl(graph)
+        if len(candidate) == 1:
+            candidate = [] 
+    elif strategy == 'conncomp':
+        print "HO SCELTO STRATEGY CONNCOMP"
+        candidates = find_all_candidates_to_merge_cc(graph)
+        candidate = find_single_set_to_merge(candidates)
+        if len(list(candidate.nodes)) == 1:
+            candidate = [] 
+    if candidate != []:
+        set_max = candidate
+        matrix = merge_set_of_clone(matrix,set_max,alpha,beta)
+        print "Ho fatto il merge_set_of_clone \n",matrix
+        d_row = create_dict_prob_row(matrix,alpha,beta)
+        print "ho un nuovo dizionario \n",d_row
+        print "grandezza matrix:",len(matrix)
+        G = create_graph(len(matrix),d_row,threshold)
+        print "ho un nuovografo"
+        matrix = merge_rows(matrix, G, strategy, alpha, beta, threshold)
+        return matrix            
+    else:
+        return matrix
 
 #function support to merge_cols !!!the miss_value are changed!!!
-def merge_cycle_mutation(matrix,cycle):
-    print "cycle for col:",cycle
-    mutations = matrix[:,cycle]
+def merge_set_of_mutation(matrix,subgraph,alpha,beta):
+    print "sto per fare il controllo delle mutazioni"
+    if type(subgraph) is not(set):
+        nodes = list(subgraph.nodes)
+        print "non e' un set,e' un grafo,mutazioni"
+    else:
+        nodes = list(subgraph)
+        print "e' un set,mutazioni"
+    mutations = matrix[:,nodes]
     new_mutation = []
     for i in range(len(mutations)):
         row = collections.Counter(mutations[i])
-        if row[0] >= row[1]:
-            new_mutation = np.append(new_mutation, 0)
-        else:
+        prob_all_one = alpha**row[0]*(1-beta)**row[1]
+        prob_all_zero = beta**row[1]*(1-alpha)**row[0]
+        if prob_all_one >= prob_all_zero:
             new_mutation = np.append(new_mutation, 1)
-    for index in cycle:
-        matrix[:,index] = new_mutation
+        else:
+            new_mutation = np.append(new_mutation, 0)
+    set_nodes = set(nodes)
+    set_mutation = set(range(len(matrix[0])))
+    new_index = list(set_nodes-set_mutation)
+    matrix = matrix[:,new_index]
+    matrix = np.column_stack((matrix,np.array(new_mutation)))
     print "new mutation:",new_mutation
-
     return matrix
 
 
 #merge cols with higher likelihood value
-def merge_cols(matrix, d, percent):
-    check = np.zeros((1,len(matrix[0])))
-    G = nx.Graph()
-    [G.add_edge(key[0],key[1], weight = value) for key, value in d.iteritems() if value>percent]
-    cycles = sorted(map(sorted,nx.cycle_basis(G)))
-    if len(cycles) != 0:
-        edge_max_value = sorted(G.edges(data=True),key= lambda x: x[2]['weight']<1,reverse=True)[0]
-        c = max([l for l in cycles if edge_max_value[1] in l and edge_max_value[0] in l],key=len)
-        cycle = cycles.pop(cycles.index(sorted(list(c))))
-        for j in cycle:
-            check[0][j] = 1
-        matrix = merge_cycle_mutation(matrix, cycle)
-        for i in range(len(cycles)):
-            indexes = []
-            for index in cycles[i]:
-                if check[0][index] == 0:
-                    indexes.append(index)
-                    check[0][index] == 1
-            if len(indexes) == 1:
-                matrix = find_max_edge(G,matrix,indexes[0])
-            else:
-                matrix = merge_cycle_mutation(matrix, indexes)
-    return matrix
+def merge_cols(matrix, graph, strategy,alpha,beta,threshold):
+    candidates = []
+    if strategy == 'clique':
+        candidate = find_all_candidates_to_merge_cl(graph)
+        if len(candidate) == 1:
+            candidate = [] 
+    elif strategy == 'conncomp':
+        candidates = find_all_candidates_to_merge_cc(graph)
+        candidate = find_single_set_to_merge(candidates)
+        if len(list(candidate.nodes)) == 1:
+            candidate = [] 
+    if candidate != []:
+        set_max = candidate
+        matrix = merge_set_of_mutation(matrix,set_max,alpha,beta)
+        d_row = create_dict_prob_col(matrix,alpha,beta)
+        G = create_graph(len(input_matrix),d_row,threshold)
+        matrix = merge_cols(matrix, G, strategy, alpha, beta, threshold)
+        return matrix
+    else:
+        return matrix
+
 
 #merge clones/rows with many missing value
 def remove_clones(matrix,missing_value):
@@ -224,6 +274,7 @@ def prob_independent_mutations(col1,col2,alpha,beta):
 #==================================================================#
 
 #--------------------------Parse Arguments-------------------------#
+
 parser = argparse.ArgumentParser(description='gpps', add_help=True)
 
 parser.add_argument('-f', '--file', action='store', type=str, required=True,
@@ -241,28 +292,39 @@ parser.add_argument('-b', '--falsepositive', action='store', type=float, require
                     help='set -b False positive probability.')
 parser.add_argument('-a', '--falsenegative', action='store', type=float, required=True,
                     help='set -a False negative probability.')
-parser.add_argument('-p', '--percent', action='store', type=float, required=True,
-					help='set -p accuracy threshold probability for clones or mutations.')
-parser.add_argument('-mv', '--missingvalues', action='store', type=float, required=True,
+parser.add_argument('-ts', '--threshold', action='store', type=float, required=True,
+					help='set -ts accuracy threshold probability for clones or mutations.')
+parser.add_argument('-mv', '--missingvalues', action='store', type=float, 
 					help='set -mv max missing values for every row or col,in percent')
-parser.add_argument('-fo', '--fewone', action='store', type=float, required=True,
+parser.add_argument('-fo', '--fewone', action='store', type=float,
 					help='set -fp threshold for mutation with few one,in percent')
 parser.add_argument('--mps', action='store_true',
                     help='This will output the model in MPS format instead of running the solver')
+parser.add_argument('-str', '--strategy', action='store', type=str, required=True,
+                    help='strategy to do use for merging: \'clique\' or \'conncomp\'. The first option is more conservatived than the second option')
 
 args = parser.parse_args()
 
 
 max_gains = 1
-max_losses = int(args.k)
+if args.k is not(None):
+    max_losses = int(args.k)
 alpha = float(args.falsenegative)
 lalpha = math.log(alpha)
 beta = float(args.falsepositive)
 lbeta = math.log(beta)
-percent = float(args.percent)
-lpercent = math.log(percent)
-missing_value = float(args.missingvalues)#math.log(float(args.missingvalues))
-few_one = float(args.fewone)#math.log(float(args.fewone)) 
+threshold = float(args.threshold)
+lthreshold = math.log(threshold)
+if args.missingvalues is not(None):
+    missing_value = float(args.missingvalues)#math.log(float(args.missingvalues))
+else:
+    missing_value = None
+if args.fewone is not(None):
+    few_one = float(args.fewone)#math.log(float(args.fewone))
+else:
+    few_one = None
+if args.strategy == 'clique' or args.strategy == 'conncomp':
+    strategy = args.strategy
 
 #----------------------Initialize program----------------------#
 input_matrix = read_matrix_tab(args.file)
@@ -277,39 +339,22 @@ print('Num clones: %d' % num_clones)
 
 print "original matrix:",input_matrix
 
-input_matrix = remove_clones(input_matrix, missing_value)
-input_matrix = remove_mutations(input_matrix, missing_value, few_one)
+if missing_value is not(None):
+    input_matrix = remove_clones(input_matrix, missing_value)
+if few_one is not(None):
+    input_matrix = remove_mutations(input_matrix, missing_value, few_one)
 
-print "after missing-value and Few-one","\n",input_matrix
+#print "after missing-value and Few-one","\n",input_matrix
 
-#I use the dict, pair clones(them index)and similar probability.
-#make tuple 
-tup_row = namedtuple('Tup',['index','percent'])
-pair_percent =[]
-for index1 in range(len(input_matrix)-1):
-    for index2 in range(index1+1,len(input_matrix)):
-        prob = prob_mergin(input_matrix[index1],input_matrix[index2],alpha,beta)
-        pair_percent.append(tup_row((index1,index2),prob))
 
-d_row = dict(pair_percent)
-G = create_graph(len(input_matrix),d_row,percent)
-input_matrix = merge_rows(input_matrix, G)
-
+d_row = create_dict_prob_row(input_matrix,alpha,beta)
+G = create_graph(len(input_matrix),d_row,threshold)
+input_matrix = merge_rows(input_matrix, G, strategy,alpha,beta,threshold)
 print "matrix after merge_rows:",input_matrix
 
-#I use the dict, pair mutations(them index)and similar probability.
-#make tuple
-tup_col = namedtuple('Tup',['index','percent'])
-pair_probability = []
-#print input_matrix
-for index1 in range(len(input_matrix[0])-1):
-    for index2 in range(index1+1,len(input_matrix[0])):
-        prob = prob_merging_mutations(input_matrix[:,index1],input_matrix[:,index2],alpha,beta)
-        pair_probability.append(tup_col((index1,index2),prob))
-
-d_col = dict(pair_probability)
-input_matrix = merge_cols(input_matrix, d_col, percent)
-
+d_col = create_dict_prob_col(input_matrix, alpha, beta)
+G = create_graph(len(input_matrix[0]),d_row,threshold)
+input_matrix = merge_cols(input_matrix, G, strategy,alpha,beta,threshold)
 print "matrix after merge_cols:",input_matrix
 
 # Fixed parameters
@@ -330,7 +375,7 @@ pair_mutations_dependent = []
 for index1 in range(num_mutations-1):
 	for index2 in range(index1+1,num_mutations):
 		prob_indipendent ,prob_not_independent = prob_independent_mutations(input_matrix[:,index1],input_matrix[:,index2],alpha,beta)
-		pair_mutations_dependent.append([(index1,index2),prob])
+		pair_mutations_dependent.append([(index1,index2),(prob_indipendent, prob_not_independent)])
 #print "pair_mutations_dependent", pair_mutations_dependent
 
 import os
