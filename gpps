@@ -86,15 +86,11 @@ def prob_merging(row1, row2, alpha, beta):
 
 #function support to merge_rows
 def merge_set_of_clone(matrix,subgraph,alpha,beta):
-    print "sto per fare il controllo,per le cellule"
     if type(subgraph) is not(set):
         nodes = list(subgraph.nodes)
-        print "non e' un set,e' un grafo,per le cellule"
     else:
         nodes = list(subgraph)
-        print "e' un set,per le cellule"
     clones = matrix[np.array(nodes)]
-    print clones
     new_clone = []
     for i in range(len(clones[0])):
         col = collections.Counter(clones[:,i])
@@ -105,15 +101,10 @@ def merge_set_of_clone(matrix,subgraph,alpha,beta):
         else:
             new_clone = np.append(new_clone, 0)
     set_nodes = set(nodes)
-    print "set_nodes",set_nodes
     set_clones = set(range(len(matrix)))
-    print "set_clones",set_clones
     new_index = list(set_clones-set_nodes)
-    print "new_index",new_index
     matrix = matrix[new_index]
-    matrix = np.vstack((matrix,new_clone))
-    print "new clone:",new_clone
-    print "matrix now",matrix     
+    matrix = np.vstack((matrix,new_clone))     
     return matrix  
 
 
@@ -147,13 +138,11 @@ def find_all_candidates_to_merge_cc(graph):
 #merge rows with higher likelihood value, behind merge the cicle, after merge the single edge, if there are
 def merge_rows(matrix, graph, strategy,alpha,beta,threshold):
     candidates = []
-    print "SONO DENTRO MERGE_ROWS"
     if strategy == 'clique':
         candidate = find_all_candidates_to_merge_cl(graph)
         if len(candidate) == 1:
             candidate = [] 
     elif strategy == 'conncomp':
-        print "HO SCELTO STRATEGY CONNCOMP"
         candidates = find_all_candidates_to_merge_cc(graph)
         candidate = find_single_set_to_merge(candidates)
         if len(list(candidate.nodes)) == 1:
@@ -161,12 +150,8 @@ def merge_rows(matrix, graph, strategy,alpha,beta,threshold):
     if candidate != []:
         set_max = candidate
         matrix = merge_set_of_clone(matrix,set_max,alpha,beta)
-        print "Ho fatto il merge_set_of_clone \n",matrix
         d_row = create_dict_prob_row(matrix,alpha,beta)
-        print "ho un nuovo dizionario \n",d_row
-        print "grandezza matrix:",len(matrix)
-        G = create_graph(len(matrix),d_row,threshold)
-        print "ho un nuovografo"
+        G = create_graph(len(matrix),d_row,threshold)"
         matrix = merge_rows(matrix, G, strategy, alpha, beta, threshold)
         return matrix            
     else:
@@ -174,13 +159,10 @@ def merge_rows(matrix, graph, strategy,alpha,beta,threshold):
 
 #function support to merge_cols !!!the miss_value are changed!!!
 def merge_set_of_mutation(matrix,subgraph,alpha,beta):
-    print "sto per fare il controllo delle mutazioni"
     if type(subgraph) is not(set):
         nodes = list(subgraph.nodes)
-        print "non e' un set,e' un grafo,mutazioni"
     else:
         nodes = list(subgraph)
-        print "e' un set,mutazioni"
     mutations = matrix[:,nodes]
     new_mutation = []
     for i in range(len(mutations)):
@@ -196,7 +178,6 @@ def merge_set_of_mutation(matrix,subgraph,alpha,beta):
     new_index = list(set_nodes-set_mutation)
     matrix = matrix[:,new_index]
     matrix = np.column_stack((matrix,np.array(new_mutation)))
-    print "new mutation:",new_mutation
     return matrix
 
 
@@ -264,8 +245,6 @@ def prob_independent_mutations(col1,col2,alpha,beta):
         elif (col1[i] != 2) and (col2[i] != 2):
             prob_ind = prob_ind * (1-((1-beta)*alpha))
             prob_not_independent = prob_not_independent * (((1-beta)*alpha))
-    #print "prob_not_independent", prob_not_independent
-    #print "prob_ind", prob_ind
     return prob_ind, prob_not_independent
 
 
@@ -337,25 +316,21 @@ print('parameters before the selection criteria')
 print('Num mutations: %d' % num_mutations)
 print('Num clones: %d' % num_clones)
 
-print "original matrix:",input_matrix
 
 if missing_value is not(None):
     input_matrix = remove_clones(input_matrix, missing_value)
 if few_one is not(None):
     input_matrix = remove_mutations(input_matrix, missing_value, few_one)
 
-#print "after missing-value and Few-one","\n",input_matrix
 
 
 d_row = create_dict_prob_row(input_matrix,alpha,beta)
 G = create_graph(len(input_matrix),d_row,threshold)
 input_matrix = merge_rows(input_matrix, G, strategy,alpha,beta,threshold)
-print "matrix after merge_rows:",input_matrix
 
 d_col = create_dict_prob_col(input_matrix, alpha, beta)
 G = create_graph(len(input_matrix[0]),d_row,threshold)
 input_matrix = merge_cols(input_matrix, G, strategy,alpha,beta,threshold)
-print "matrix after merge_cols:",input_matrix
 
 # Fixed parameters
 #num_samples = len(input_matrix)
@@ -369,14 +344,13 @@ print("parameters after the selection criteria")
 #print('Num samples: %d' % num_samples)
 print('Num mutations: %d' % num_mutations)
 print('Num clones: %d' % num_clones)
-#print input_matrix
 
 pair_mutations_dependent = []
 for index1 in range(num_mutations-1):
 	for index2 in range(index1+1,num_mutations):
 		prob_indipendent ,prob_not_independent = prob_independent_mutations(input_matrix[:,index1],input_matrix[:,index2],alpha,beta)
 		pair_mutations_dependent.append([(index1,index2),(prob_indipendent, prob_not_independent)])
-#print "pair_mutations_dependent", pair_mutations_dependent
+
 
 import os
 try:
