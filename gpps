@@ -21,10 +21,9 @@ from outputs import *
 
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!COSE DA FARE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#TROVARE/PROVARE AD UTILIZZARE LE PERCENTUALI LOGARITMICHE
-#ripetere le stesse operazioni per le colonne
+#creare file output della matrice
+#scrivere un file output anche delle mutazioni, e capire chi si e' legato con chi 
 #creare dei casi di test e provarli
-
 
 
 #create graph for rows and return it
@@ -47,12 +46,14 @@ def create_graph(n_nodes,dictionary,threshold):
 
 #I use the dict, pair clones(them index)and similar probability.
 #make tuple
-def create_dict_prob_row(matrix,alpha,beta): 
+def create_dict_prob_row(matrix,alpha,l_alpha,beta,l_beta): 
     tup_row = namedtuple('Tup',['index','percent'])
     pair_percent =[]
     for index1 in range(len(matrix)-1):
         for index2 in range(index1+1,len(matrix)):
-            prob = prob_merging(matrix[index1],matrix[index2],alpha,beta)
+            print "indexes:",index1,index2
+            prob = prob_merging(matrix[index1],matrix[index2],alpha,l_alpha,beta,l_beta)
+            print prob
             pair_percent.append(tup_row((index1,index2),prob))
     d_row = dict(pair_percent)
     return d_row
@@ -60,32 +61,32 @@ def create_dict_prob_row(matrix,alpha,beta):
 
 #I use the dict, pair mutations(them index)and similar probability.
 #make tuple
-def create_dict_prob_col(matrix,alpha,beta):
+def create_dict_prob_col(matrix,alpha,l_apha,beta,l_beta):
     tup_col = namedtuple('Tup',['index','percent'])
     pair_probability = []
     for index1 in range(len(matrix[0])-1):
         for index2 in range(index1+1,len(matrix[0])):
-            prob = prob_merging(matrix[:,index1],matrix[:,index2],alpha,beta)
+            prob = prob_merging(matrix[:,index1],matrix[:,index2],alpha,l_apha,beta,l_beta)
             pair_probability.append(tup_col((index1,index2),prob))
     d_col = dict(pair_probability)
     return d_col
 
 #for every pair rows returns likelihood probability
-def prob_merging(row1, row2, alpha, beta):
+def prob_merging(row1, row2, alpha, l_alpha, beta, l_beta):
     prob = 1
     lenght = len(row1)
     for i in range(lenght):
         if row1[i] == row2[i]:
             if row1[i] == 1:
-                prob = prob * ((1-beta)**2+beta**2)
+                prob = prob * ((l_beta)**2+beta**2)
             elif row1[i] == 0:
-                prob = prob * ((1-alpha)**2+alpha**2)
+                prob = prob * ((l_alpha)**2+alpha**2)
         elif (row1[i] != 2) and (row2[i] != 2):
-            prob = prob * ((1-beta)*alpha + (1-alpha)*beta)
+            prob = prob * ((l_beta)*alpha + (l_alpha)*beta)
     return prob
 
 #function support to merge_rows
-def merge_set_of_clone(matrix,subgraph,alpha,beta):
+def merge_set_of_clone(matrix,subgraph,alpha,l_alpha,beta,l_beta):
     if type(subgraph) is not(set):
         nodes = list(subgraph.nodes)
     else:
@@ -94,8 +95,8 @@ def merge_set_of_clone(matrix,subgraph,alpha,beta):
     new_clone = []
     for i in range(len(clones[0])):
         col = collections.Counter(clones[:,i])
-        prob_all_one = alpha**col[0]*(1-beta)**col[1]
-        prob_all_zero = beta**col[1]*(1-alpha)**col[0]
+        prob_all_one = alpha**col[0]*(l_beta)**col[1]
+        prob_all_zero = beta**col[1]*(l_alpha)**col[0]
         if prob_all_one >= prob_all_zero:
             new_clone = np.append(new_clone, 1)
         else:
@@ -136,8 +137,11 @@ def find_all_candidates_to_merge_cc(graph):
     return candidates
     
 #merge rows with higher likelihood value, behind merge the cicle, after merge the single edge, if there are
-def merge_rows(matrix, graph, strategy,alpha,beta,threshold):
+def merge_rows(matrix, graph, strategy,alpha,l_alpha,beta,l_beta,threshold,merge_clone):
     candidates = []
+    #print "conta i SONO QUI"
+    #print "type(merge_clone):",type(merge_clone)
+    #print "merge_clone",merge_clone
     if strategy == 'clique':
         candidate = find_all_candidates_to_merge_cl(graph)
         if len(candidate) == 1:
@@ -149,16 +153,22 @@ def merge_rows(matrix, graph, strategy,alpha,beta,threshold):
             candidate = [] 
     if candidate != []:
         set_max = candidate
-        matrix = merge_set_of_clone(matrix,set_max,alpha,beta)
-        d_row = create_dict_prob_row(matrix,alpha,beta)
+        #print "ho scelto il candidato"
+        #print "type(merge_clone):",type(merge_clone)
+        #print "candidate",candidate
+        merge_clone.append(list(candidate))
+        #print "merge_clone",merge_clone
+        matrix = merge_set_of_clone(matrix,set_max,alpha,l_alpha,beta, l_beta)
+        d_row = create_dict_prob_row(matrix,alpha,l_alpha,beta,l_beta)
         G = create_graph(len(matrix),d_row,threshold)
-        matrix = merge_rows(matrix, G, strategy, alpha, beta, threshold)
-        return matrix            
+        #print "sto per richiamare la funzione in modo ricorsivo:",merge_clone
+        matrix,merge_clone = merge_rows(matrix, G, strategy, alpha, l_alpha, beta,l_beta, threshold,merge_clone)
+        return matrix,merge_clone            
     else:
-        return matrix
+        return matrix,merge_clone
 
 #function support to merge_cols !!!the miss_value are changed!!!
-def merge_set_of_mutation(matrix,subgraph,alpha,beta):
+def merge_set_of_mutation(matrix,subgraph,alpha,l_alpha,beta,l_beta):
     if type(subgraph) is not(set):
         nodes = list(subgraph.nodes)
     else:
@@ -167,8 +177,8 @@ def merge_set_of_mutation(matrix,subgraph,alpha,beta):
     new_mutation = []
     for i in range(len(mutations)):
         row = collections.Counter(mutations[i])
-        prob_all_one = alpha**row[0]*(1-beta)**row[1]
-        prob_all_zero = beta**row[1]*(1-alpha)**row[0]
+        prob_all_one = alpha**row[0]*(l_beta)**row[1]
+        prob_all_zero = beta**row[1]*(l_alpha)**row[0]
         if prob_all_one >= prob_all_zero:
             new_mutation = np.append(new_mutation, 1)
         else:
@@ -182,7 +192,7 @@ def merge_set_of_mutation(matrix,subgraph,alpha,beta):
 
 
 #merge cols with higher likelihood value
-def merge_cols(matrix, graph, strategy,alpha,beta,threshold):
+def merge_cols(matrix, graph, strategy,alpha,l_alpha,beta,l_beta,threshold,merge_mutation):
     candidates = []
     if strategy == 'clique':
         candidate = find_all_candidates_to_merge_cl(graph)
@@ -195,13 +205,14 @@ def merge_cols(matrix, graph, strategy,alpha,beta,threshold):
             candidate = [] 
     if candidate != []:
         set_max = candidate
-        matrix = merge_set_of_mutation(matrix,set_max,alpha,beta)
-        d_row = create_dict_prob_col(matrix,alpha,beta)
-        G = create_graph(len(input_matrix),d_row,threshold)
-        matrix = merge_cols(matrix, G, strategy, alpha, beta, threshold)
-        return matrix
+        merge_mutation.append(candidate)
+        matrix = merge_set_of_mutation(matrix,set_max,alpha,l_alpha,beta,l_beta)
+        d_row = create_dict_prob_col(matrix,alpha,l_alpha,beta,l_beta)
+        G = create_graph(len(matrix),d_row,threshold)
+        matrix,merge_mutation = merge_cols(matrix, G, strategy, alpha,l_alpha, beta,l_beta, threshold, merge_mutation)
+        return matrix,merge_mutation
     else:
-        return matrix
+        return matrix,merge_mutation
 
 
 #merge clones/rows with many missing value
@@ -230,292 +241,122 @@ def remove_mutations(matrix, missing_value, few_one):
     return matrix
 
 #return if the mutations are independent or dependent with probability
-def prob_independent_mutations(col1,col2,alpha,beta):
+def prob_independent_mutations(col1,col2,alpha,l_alpha,beta,l_beta):
     lenght = len(col1)
     prob_ind = 1
     prob_not_independent = 1
     for i in range(lenght):
         if col1[i] == col2[i]:
             if col1[i] == 1:
-                prob_ind = prob_ind * (1-((1-beta)**2))
-                prob_not_independent = prob_not_independent * (((1-beta)**2))
+                prob_ind = prob_ind * (1-((l_beta)**2))
+                prob_not_independent = prob_not_independent * (((l_beta)**2))
             elif col1[i] == 0:
-                prob_ind = prob_ind * ((1-alpha)**2)
-                prob_not_independent = prob_not_independent * (1-((1-alpha)**2))
+                prob_ind = prob_ind * ((l_alpha)**2)
+                prob_not_independent = prob_not_independent * (1-((l_alpha)**2))
         elif (col1[i] != 2) and (col2[i] != 2):
-            prob_ind = prob_ind * (1-((1-beta)*alpha))
-            prob_not_independent = prob_not_independent * (((1-beta)*alpha))
+            prob_ind = prob_ind * (1-((l_beta)*alpha))
+            prob_not_independent = prob_not_independent * (((l_beta)*alpha))
     return prob_ind, prob_not_independent
 
+#create text to file output mutation
+def merge_file_mutation(testo,merge_mutations):
+    newFile = testo
+    for group in merge_mutations:
+        merge = []
+        temp = []
+        for i in range(len(newFile)):
+            if i in group:
+                merge.append(newFile[i])
+            else:
+                temp.append(newFile[i])
+        flat = [val for sublist in merge for val in sublist]        
+        temp.append(flat)
+        newFile = temp
+    return newFile
 
-#==================================================================#
-#========================= PREREQUISITES ==========================#
-#==================================================================#
+def write_file_log(outfile,num_clones,merge_clone,testo,merge_mutations):
+    with open('{0}.log'.format(outfile),'w+') as file_out:
+        n = num_clones
+        turn = 1
+        print >> file_out, "---CLONE---"
+        for group in merge_clone:
+            n = n-len(group)+1
+            print >> file_out, "turn:",turn
+            print >> file_out, group,"->new index->",n
+            turn = turn + 1
+        newFile = testo
+        turn = 1
+        print >> file_out, "----MUTATION----"
+        for group in merge_mutations:
+            print >> file_out, "turn:",turn
+            merge = []
+            temp = []
+            for i in range(len(newFile)):
+                if i in group:
+                    merge.append(newFile[i])
+                else:
+                     temp.append(newFile[i])
+            print >> file_out, str(merge)
+            flat = [val for sublist in merge for val in sublist]        
+            temp.append(flat)
+            newFile = temp
+        turn = turn+1
 
-#--------------------------Parse Arguments-------------------------#
+def gpps(pathfile,pathfileMut,pathoutput,falsenegative,falsepositive,threshold,strategy,missing_value=None,few_one=None):
+    alpha = math.log(falsenegative)
+    l_alpha = math.log(1-falsenegative)
+    beta = math.log(float(falsepositive))
+    l_beta = math.log(1-falsepositive)
+    threshold = math.log(float(threshold))
+    if strategy == 'clique' or strategy == 'conncomp':
+        strategy = strategy
+    pathfile_mutation = pathfileMut
+    input_matrix = read_matrix_tab(pathfile)
+    input_matrix = np.array(input_matrix) #I exploit library NumPy
+    
+    if missing_value is not(None):
+        input_matrix = remove_clones(input_matrix, missing_value)
+    if few_one is not(None):
+        input_matrix = remove_mutations(input_matrix, missing_value, few_one)
+    
+    num_clones = len(input_matrix)
+    num_mutations = len(input_matrix[0])
+    print "(alpha:",alpha,", beta:",beta,")"
+    print "(1-alpha:",l_alpha,", 1-beta:",l_beta,")"
+    print "trheshold:",threshold
+    d_row = create_dict_prob_row(input_matrix,alpha,beta,l_alpha,l_beta)
+    G = create_graph(len(input_matrix),d_row,threshold)
+    merge_clone = []
+    input_matrix,merge_clone = merge_rows(input_matrix, G, strategy, alpha, l_alpha, beta, l_beta, threshold, merge_clone)
 
-parser = argparse.ArgumentParser(description='gpps', add_help=True)
+    d_col = create_dict_prob_col(input_matrix, alpha, l_alpha, beta, l_beta)
+    G = create_graph(len(input_matrix[0]),d_col,threshold)
+    merge_mutation = []
+    input_matrix,merge_mutation = merge_cols(input_matrix, G, strategy,alpha, l_alpha, beta, l_beta, threshold,merge_mutation)
 
-parser.add_argument('-f', '--file', action='store', type=str, required=True,
-                    help='path of the input file.')
-parser.add_argument('-k', action='store', type=int,
-                    help='k-value of the selected model. Eg: Dollo(k)')
-parser.add_argument('-t', '--time', action='store', type=int, required=True,
-                    help='maximum time allowed for the computation. Type 0 to not impose a limit.')
-parser.add_argument('-o', '--outdir', action='store', type=str, required=True,
-                    help='output directory.')
+    import os
+    try:
+        os.makedirs(pathoutput)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(pathoutput):
+            pass
+        else:
+            raise
 
-parser.add_argument('-e', '--exp', action='store_true', default=False,
-                    help='set -e to get experimental-format results.')
-parser.add_argument('-b', '--falsepositive', action='store', type=float, required=True,
-                    help='set -b False positive probability.')
-parser.add_argument('-a', '--falsenegative', action='store', type=float, required=True,
-                    help='set -a False negative probability.')
-parser.add_argument('-ts', '--threshold', action='store', type=float, required=True,
-					help='set -ts accuracy threshold probability for clones or mutations.')
-parser.add_argument('-mv', '--missingvalues', action='store', type=float, 
-					help='set -mv max missing values for every row or col,in percent')
-parser.add_argument('-fo', '--fewone', action='store', type=float,
-					help='set -fp threshold for mutation with few one,in percent')
-parser.add_argument('--mps', action='store_true',
-                    help='This will output the model in MPS format instead of running the solver')
-parser.add_argument('-str', '--strategy', action='store', type=str, required=True,
-                    help='strategy to do use for merging: \'clique\' or \'conncomp\'. The first option is more conservatived than the second option')
+    filename = os.path.splitext(os.path.basename(pathfile))[0]
+    #print "filename",filename
+    outfile = os.path.join(pathoutput, filename)
+    #print "outfile",outfile
 
-args = parser.parse_args()
+    with open(pathfile_mutation, 'r') as file_mut:
+        testo = file_mut.readlines()
 
+    file_mutation = merge_file_mutation(testo,merge_mutation)
 
-max_gains = 1
-if args.k is not(None):
-    max_losses = int(args.k)
-alpha = float(args.falsenegative)
-lalpha = math.log(alpha)
-beta = float(args.falsepositive)
-lbeta = math.log(beta)
-threshold = float(args.threshold)
-lthreshold = math.log(threshold)
-if args.missingvalues is not(None):
-    missing_value = float(args.missingvalues)#math.log(float(args.missingvalues))
-else:
-    missing_value = None
-if args.fewone is not(None):
-    few_one = float(args.fewone)#math.log(float(args.fewone))
-else:
-    few_one = None
-if args.strategy == 'clique' or args.strategy == 'conncomp':
-    strategy = args.strategy
+    with open('{0}_mutation.out'.format(outfile),'w+') as file_mut_out:
+        for item in file_mutation:
+            print >> file_mut_out, item
 
-#----------------------Initialize program----------------------#
-input_matrix = read_matrix_tab(args.file)
-matrix_name = os.path.basename(args.file).split('.')[0]
-input_matrix = np.array(input_matrix) #I exploit library NumPy
+    np.savetxt('{0}_matrix.out'.format(outfile), input_matrix , fmt = '%d', delimiter=' ',newline='\n')
 
-num_clones = len(input_matrix)
-num_mutations = len(input_matrix[0])
-print('parameters before the selection criteria')
-print('Num mutations: %d' % num_mutations)
-print('Num clones: %d' % num_clones)
-
-
-if missing_value is not(None):
-    input_matrix = remove_clones(input_matrix, missing_value)
-if few_one is not(None):
-    input_matrix = remove_mutations(input_matrix, missing_value, few_one)
-
-
-
-d_row = create_dict_prob_row(input_matrix,alpha,beta)
-G = create_graph(len(input_matrix),d_row,threshold)
-input_matrix = merge_rows(input_matrix, G, strategy,alpha,beta,threshold)
-
-d_col = create_dict_prob_col(input_matrix, alpha, beta)
-G = create_graph(len(input_matrix[0]),d_row,threshold)
-input_matrix = merge_cols(input_matrix, G, strategy,alpha,beta,threshold)
-
-# Fixed parameters
-#num_samples = len(input_matrix)
-# num_clones = int(num_mutations * args.clones)
-num_clones = len(input_matrix)
-num_mutations = len(input_matrix[0])
-num_columns = num_mutations * (1 + max_losses)
-max_error = 1
-
-print("parameters after the selection criteria")
-#print('Num samples: %d' % num_samples)
-print('Num mutations: %d' % num_mutations)
-print('Num clones: %d' % num_clones)
-
-pair_mutations_dependent = []
-for index1 in range(num_mutations-1):
-	for index2 in range(index1+1,num_mutations):
-		prob_indipendent ,prob_not_independent = prob_independent_mutations(input_matrix[:,index1],input_matrix[:,index2],alpha,beta)
-		pair_mutations_dependent.append([(index1,index2),(prob_indipendent, prob_not_independent)])
-
-
-import os
-try:
-    os.makedirs(args.outdir)
-except OSError as exc:
-    if exc.errno == errno.EEXIST and os.path.isdir(args.outdir):
-        pass
-    else:
-        raise
-
-filename = os.path.splitext(os.path.basename(args.file))[0]
-outfile = os.path.join(args.outdir, filename)
-
-#==================================================================#
-#========================== GUROBI MODEL ==========================#
-#==================================================================#
-start_model_time = datetime.now()
-model = Model('Parsimony Phylogeny Model')
-model.setParam('Threads', 4)
-if args.time != 0:
-    model.setParam('TimeLimit', args.time)
-
-#---------------------------------------------------#
-#------------------- VARIABLES ---------------------#
-#---------------------------------------------------#
-
-#-----------Variable Y and B---------------
-
-#lalpha = math.log(alpha)
-#lbeta = math.log(beta)
-l_alpha = math.log(1-alpha)
-l_beta = math.log(1-beta)
-n_ones = 0
-n_zeros = 0
-
-print(lalpha, lbeta, l_alpha, l_beta)
-
-
-print('Generating variables I, F, w, P.')
-I = {}
-F = {}
-fminus = {}
-P = {}
-# False positive should be only a few
-FP = {}
-
-for row_index, row in enumerate(input_matrix):
-    I[row_index] = {}
-    F[row_index] = {}
-    fminus[row_index] = {}
-    P[row_index] = {}
-    FP[row_index] = {}
-    for col_index, cell in enumerate(row):
-        # P
-        names = expand_name(str(col_index), 1, max_losses)
-        for name in names:
-            P[row_index][name] = model.addVar(vtype=GRB.BINARY, obj=0,
-                                              name='P{0}-{1}'.format(row_index, name))
-        if cell < 2:
-            # I
-            I[row_index][col_index] = model.addVar(vtype=GRB.BINARY, obj=0,
-                                                   name='I{0}-{1}'.format(row_index, col_index))
-            model.update()
-            model.addConstr(I[row_index][col_index] == cell,
-                            "constr_I{0}-{1}".format(row_index, col_index))
-            # F and fminus. fminus is equal to 1-F
-            if cell == 0:
-                F[row_index][col_index] = model.addVar(vtype=GRB.BINARY, obj=lalpha,
-                                                       name='F{0}-{1}'.format(row_index, col_index))
-                fminus[row_index][col_index] = model.addVar(vtype=GRB.BINARY, obj=l_beta,
-                                                            name='f{0}-{1}'.format(row_index, col_index))
-            if cell == 1:
-                F[row_index][col_index] = model.addVar(vtype=GRB.BINARY, obj=l_alpha,
-                                                       name='F{0}-{1}'.format(row_index, col_index))
-                fminus[row_index][col_index] = model.addVar(vtype=GRB.BINARY, obj=lbeta,
-                                                            name='f{0}-{1}'.format(row_index, col_index))
-                FP[row_index][col_index] = model.addVar(vtype=GRB.BINARY, obj=0,
-                                                        name='FP{0}-{1}'.format(row_index, col_index))
-                model.update()
-                model.addConstr(FP[row_index][col_index] == 1 - P[row_index][names[0]],
-                                name='constr_FP{0}-{1}'.format(row_index, col_index))
-            model.update()
-            model.addConstr(F[row_index][col_index] == 1 - fminus[row_index][col_index],
-                            name='constr_def_fminus{0}-{1}'.format(row_index, col_index))
-            model.addConstr(F[row_index][col_index] == P[row_index][names[0]] - quicksum(P[row_index][name] for name in names[1:]),
-                            name='constr_balance_F{0}-{1}'.format(row_index, col_index))
-            model.addConstr(P[row_index][names[0]] >= quicksum(P[row_index][name] for name in names[1:]),
-                            name='constr_imbalance_P{0}-{1}'.format(row_index, col_index))
-
-# There are only a few false positives
-model.addConstr(4 >= quicksum(FP[r][c] for r in FP.keys() for c in FP[r].keys()),
-                name='constr_few_FP')
-
-model.update()
-
-print('Generating variables B.')
-B = {}
-columns = list(itertools.chain.from_iterable(
-    [expand_name(str(name), 1, max_losses) for name in range(num_mutations)]))
-for p in columns:
-    B[p] = {}
-for p, q in itertools.combinations(columns, 2):
-    B[p][q] = {}
-    B[p][q]['01'] = model.addVar(vtype=GRB.BINARY, obj=0,
-                                 name='B[{0},{1},0,1]'.format(p, q))
-    B[p][q]['10'] = model.addVar(vtype=GRB.BINARY, obj=0,
-                                 name='B[{0},{1},1,0]'.format(p, q))
-    B[p][q]['11'] = model.addVar(vtype=GRB.BINARY, obj=0,
-                                 name='B[{0},{1},1,1]'.format(p, q))
-    model.update()
-    for row_index, row in enumerate(input_matrix):
-        model.addConstr(B[p][q]['01'] >= P[row_index][q] - P[row_index][p],
-                        "constr_B01-{0}-{1}-{2}".format(p, q, row_index))
-        model.addConstr(B[p][q]['10'] >= P[row_index][p] - P[row_index][q],
-                        "constr_B10-{0}-{1}-{2}".format(p, q, row_index))
-        model.addConstr(B[p][q]['11'] >= P[row_index][p]+P[row_index][q]-1,
-                        "constr_B11-{0}-{1}-{2}".format(p, q, row_index))
-    model.addConstr(B[p][q]['01'] + B[p][q]['10'] + B[p][q]['11'] <= 2,
-                    "constr_sum_B{0}-{1}".format(p, q))
-
-
-print("UPDATE")
-model.update()
-
-#-------------OBJECTIVE FUNCTION-----------
-
-model.modelSense = GRB.MAXIMIZE
-model.update()
-
-#---------------------------------------------------#
-#------------------ CONSTRAINTS --------------------#
-#---------------------------------------------------#
-
-
-#-------------Model Specific constraints------------
-
-
-if args.mps:
-    print("Writing the model")
-    model.write(outfile + '.mps')
-    sys.exit(0)
-
-
-print('#----- GUROBI OPTIMIZATION ----#')
-start_optimize = datetime.now()
-model.optimize()
-
-#==================================================================#
-#======================= POST OPTIMIZATION ========================#
-#==================================================================#
-
-matrix = []
-# print(P)
-with open('{0}.ilp.extended.out'.format(outfile), 'w+') as file_out:
-    for row_index, row in enumerate(input_matrix):
-        row_out = []
-        for col_index, cell in enumerate(row):
-            names = expand_name(str(col_index), 1, max_losses)
-            for name in names:
-                row_out.append(int(float(P[row_index][name].X)))
-        matrix.append(row_out)
-        file_out.write(' '.join([str(x) for x in row_out]))
-        file_out.write('\n')
-
-if model.status == GRB.Status.OPTIMAL or model.status == GRB.Status.TIME_LIMIT:
-    value = float(model.objVal) + n_zeros * l_beta + n_ones * lbeta
-    with open('{0}.ilp.log'.format(outfile), 'w+') as file_out:
-        file_out.write('Optimal likelihood: %f\n' % value)
+    write_file_log(outfile,num_clones,merge_clone,testo,merge_mutation)
